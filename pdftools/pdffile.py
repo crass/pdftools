@@ -762,7 +762,7 @@ class Page(Abstract):
             
             # A list of the filters to be used to process the stream is also
             # given.
-            filters = self.document._dereference(item[0]['Filter'])
+            filters = self.document._dereference(item[0].get('Filter', []))
             
             # The second entry contains the stream. We check that the stream
             # start and end positions determined when the file was read agree
