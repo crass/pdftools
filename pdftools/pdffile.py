@@ -37,7 +37,7 @@ Example of use:
     if pages > 123:
     
         page123 = doc.read_page(123)
-        contents123 = page123._read_contents()
+        contents123 = page123.read_contents()
         
         print "The objects found in this page:"
         print
@@ -45,7 +45,6 @@ Example of use:
     
 """
 import sys, types, zlib
-import Numeric
 
 # Import useful definitions.
 from pdfdefs import *
@@ -86,6 +85,137 @@ class PDFDocument(Abstract):
         
         # Prepare the document for reading.
         self._read_document()
+    
+    # Return version information
+
+    def document_version(self):
+        """Read the version of PDF used to encode the document.
+            Returns a string containing the version number.
+
+        Example: version = doc.document_version()
+        """
+        offset, element = self._read_comment(1)
+    
+        if isinstance(element, comment) == 0:
+            print 'Not a PDF file'
+    
+        elif element.comment[:4] != 'PDF-':
+            raise PDFError, 'Not a PDF file'
+    
+        else:
+            self.version = element.comment[4:]
+
+        return self.version
+    
+    def find_page(self, number, count = 0, tree = None):
+    
+        """number, dict = find_page(self, number, count = 0, tree = None)
+        
+        Takes a page number and a starting tree object and returns the
+        page number and either a dictionary containing the page attributes
+        (if successful) or None (if unsuccessful).
+        """
+        
+        # Using the catalogue entry if necessary, descend until a
+        # particular page is found.
+        
+        if tree == None:
+        
+            pages = self.catalog['Pages']
+            
+            tree = self._dereference(pages)
+        
+        # Page tree
+        if tree['Type'].name == 'Pages':
+        
+            if count < number <= count + tree['Count']:
+            
+                # The page is contained within a child of this node.
+                kids = tree['Kids']
+                
+                # We do not know how many pages are contained within each
+                # child node, so we must search through them rather than
+                # trying to directly index the "Kids" array.
+                
+                for ref in kids:
+                
+                    kid = self._dereference(ref)
+                    count, kid = self.find_page(number, count, kid)
+                    
+                    if kid is not None:
+                    
+                        # The required page was found.
+                        return count, kid
+            
+            else:
+            
+                # The page is outside the range of pages contained beneath
+                # this node.
+                count = count + tree["Count"]
+        
+        elif tree['Type'].name == 'Page':
+        
+            # Page
+            
+            # Increment the page counter to provide this page with the correct
+            # number and compare it with the page number we are looking for.
+            count = count + 1
+            
+            if count == number:
+            
+                return count, tree
+        
+        return count, None
+    
+    def count_pages(self):
+    
+        # Read the "Pages" catalogue entry.
+        pages = Pages(self, self._dereference(self.catalog["Pages"]))
+        
+        # Read the "Count" property (dictionary entry).
+        return pages["Count"]
+    
+    # _read_catalog() must be called before this function is called.
+    
+    def read_page(self, number):
+        """page_object = read_page(self, number)
+        
+        Return a Page object corresponding to the specified page.
+        
+        If the page is not found then a PDFError exception is raised.
+        
+        Example: page = doc.read_page(123)
+        """
+        # Look up the page details.
+        number, page = self.find_page(number)
+        
+        if page is None:
+        
+            raise PDFError, "No such page"
+        
+        return Page(self, page)
+    
+    def write_document(self, path = None, linearized = 0):
+    
+        """write_document(self, path = None, linearized = 0)
+        
+        Write the document to a file, either using an optional path or to
+        the original file. If linearized, the file will be optimised for
+        access by readers that read the file sequentially.
+        """
+        
+        if path is None:
+        
+            path = self.path
+        
+        try:
+        
+            fh = open(path, "wb")
+            self._write_document(fh, linearized)
+        
+        except IOError:
+        
+            raise PDFError, "Failed to write the document to %s" % path
     
     def _read_trailer(self, offset):
     
@@ -217,27 +347,6 @@ class PDFDocument(Abstract):
     
         return start, number, used, free
 
-    # Return version information
-
-    def document_version(self):
-        """Read the version of PDF used to encode the document.
-            Returns a string containing the version number.
-
-        Example: version = doc.document_version()
-        """
-        offset, element = self._read_comment(1)
-    
-        if isinstance(element, comment) == 0:
-            print 'Not a PDF file'
-    
-        elif element.comment[:4] != 'PDF-':
-            raise PDFError, 'Not a PDF file'
-    
-        else:
-            self.version = element.comment[4:]
-
-        return self.version
-    
     def _read_linearized(self):
     
         # Starting at the beginning of the file, skip the initial
@@ -416,74 +525,6 @@ class PDFDocument(Abstract):
 
         return catalog
     
-    def find_page(self, number, count = 0, tree = None):
-    
-        """number, dict = find_page(self, number, count = 0, tree = None)
-        
-        Takes a page number and a starting tree object and returns the
-        page number and either a dictionary containing the page attributes
-        (if successful) or None (if unsuccessful).
-        """
-        
-        # Using the catalogue entry if necessary, descend until a
-        # particular page is found.
-        
-        if tree == None:
-        
-            pages = self.catalog['Pages']
-            
-            tree = self._dereference(pages)
-        
-        # Page tree
-        if tree['Type'].name == 'Pages':
-        
-            if count < number <= count + tree['Count']:
-            
-                # The page is contained within a child of this node.
-                kids = tree['Kids']
-                
-                # We do not know how many pages are contained within each
-                # child node, so we must search through them rather than
-                # trying to directly index the "Kids" array.
-                
-                for ref in kids:
-                
-                    kid = self._dereference(ref)
-                    count, kid = self.find_page(number, count, kid)
-                    
-                    if kid is not None:
-                    
-                        # The required page was found.
-                        return count, kid
-            
-            else:
-            
-                # The page is outside the range of pages contained beneath
-                # this node.
-                count = count + tree["Count"]
-        
-        elif tree['Type'].name == 'Page':
-        
-            # Page
-            
-            # Increment the page counter to provide this page with the correct
-            # number and compare it with the page number we are looking for.
-            count = count + 1
-            
-            if count == number:
-            
-                return count, tree
-        
-        return count, None
-    
-    def count_pages(self):
-    
-        # Read the "Pages" catalogue entry.
-        pages = Pages(self, self._dereference(self.catalog["Pages"]))
-        
-        # Read the "Count" property (dictionary entry).
-        return pages["Count"]
-    
     # Find an inherited attribute: move up the document structure until
     # the attribute is found or we reach the top.
 
@@ -546,26 +587,6 @@ class PDFDocument(Abstract):
 
         return new_dict
 
-    # _read_catalog() must be called before this function is called.
-    
-    def read_page(self, number):
-        """page_object = read_page(self, number)
-        
-        Return a Page object corresponding to the specified page.
-        
-        If the page is not found then a PDFError exception is raised.
-        
-        Example: page = doc.read_page(123)
-        """
-        # Look up the page details.
-        number, page = self.find_page(number)
-        
-        if page is None:
-        
-            raise PDFError, "No such page"
-        
-        return Page(self, page)
-    
     def _read_document(self):
     
         """_read_document(self)
@@ -626,28 +647,6 @@ class PDFDocument(Abstract):
         # Retrieve the document's catalogue.
         self.catalog = self._read_catalog()
     
-    def write_document(self, path = None, linearized = 0):
-    
-        """write_document(self, path = None, linearized = 0)
-        
-        Write the document to a file, either using an optional path or to
-        the original file. If linearized, the file will be optimised for
-        access by readers that read the file sequentially.
-        """
-        
-        if path is None:
-        
-            path = self.path
-        
-        try:
-        
-            fh = open(path, "wb")
-            self._write_document(fh, linearized)
-        
-        except IOError:
-        
-            raise PDFError, "Failed to write the document to %s" % path
-    
     def _write_document(self, fh, linearized):
     
         # Write the PDF version to the file as a comment.
@@ -671,164 +670,6 @@ class PDFDocument(Abstract):
             self._write_catalog(catalog)
         
         fh.write("%%EOF\r")
-
-
-class CarefulPDFDocument(PDFDocument):
-
-    """CarefulPDFDocument(PDFDocument)
-    
-    PDF document reading class that is more careful when searching for
-    pages in a document.
-    """
-    
-    # Old find_page method - very slow as it uses the old method of counting
-    # pages in the document in order to find the page of the given number.
-    
-    def find_page(self, number, count = 0, tree = None):
-    
-        """number, dict = find_page(self, number, count = 0, tree = None)
-        
-        Takes a page number and a starting tree object and returns the
-        page number and either a dictionary containing the page attributes
-        (if successful) or None (if unsuccessful).
-        """
-        
-        # Using the catalogue entry if necessary, descend until a
-        # particular page is found.
-        
-        if tree == None:
-        
-            pages = self.catalog['Pages']
-            
-            tree = self._dereference(pages)
-        
-        # Page tree
-        if tree['Type'].name == 'Pages':
-        
-            kids = tree['Kids']
-            
-            for ref in kids:
-            
-                kid = self._dereference(ref)
-                count, kid = self.find_page(number, count, kid)
-                
-                if kid != None:
-                    return count, kid
-            
-            return count, None
-        
-        elif tree['Type'].name == 'Page':
-        
-            # Page
-            count = count + 1
-            if count == number:
-            
-                return count, tree
-        
-        return count, None
-    
-    # Old method for counting pages; calculates the number of pages by
-    # counting them.
-    
-    def count_pages(self, count = 0, tree = None):
-
-        # Using the catalogue entry if necessary, descend until a
-        # particular page is found.
-        
-        if tree == None:
-
-            pages = self.catalog['Pages']
-
-            tree = self._dereference(pages)
-
-        # Page tree
-        if tree['Type'].name == 'Pages':
-
-            kids = tree['Kids']
-
-            for ref in kids:
-
-                kid = self._dereference(ref)
-                
-                # The number of pages is incremented by recursive calls
-                # to this method so it is not necessary to increment the
-                # number of pages here.
-                count = self.count_pages(count, kid)
-
-            return count
-
-        # Page
-        elif tree['Type'].name == 'Page':
-
-            return count + 1
-        
-        else:
-        
-            return count
-    
-    # Working read_page method
-    
-    def raw_read_page(self, number):
-        """mediabox, resources, contents = read_page(self, number)
-        
-        Return the MediaBox, Resources and Contents of a specified page.
-        
-        If the page is not found then a PDFError exception is raised.
-        [Perhaps this should be an exception with a different meaning.]
-        [* Experimental method *]
-
-        Example: m, r, c = doc.read_page(123)
-        """
-        # Look up the page details.
-        number, page = self.find_page(number)
-        
-        if page is None:
-        
-            raise PDFError, "No such page"
-        
-        # Fetch the MediaBox.
-        mediabox = self._inherit(page, 'MediaBox')
-        
-        # Fetch the Resources.
-        resources = self._dereference(self._inherit(page, 'Resources'))
-        
-        # Collect all the resources in the Resources entry into one dictionary.
-        resources = self._collect_dict(resources)
-        
-        # Fetch the Contents.
-        contents_list = self._dereference(self._inherit(page, 'Contents'))
-        
-        start = contents_list[1].start
-        end   = contents_list[1].end
-        contents = self.file[start:end]
-        
-        filters = contents_list[0]['Filter']
-        
-        if isinstance(filters, name):
-        
-            filters = [filters]
-        
-        # Examine the Contents dictionary
-        for filter in filters:
-        
-            # print filter.name
-            if filter.name == '_asciihexdecode':
-            
-                contents = self._asciihexdecode(contents)
-            
-            elif filter.name == '_ascii85decode':
-            
-                contents = self._ascii85decode(contents)
-            
-            elif filter.name == 'FlateDecode':
-            
-                contents = zlib.decompress(contents)
-            
-            else:
-                raise PDFError, 'Unknown Filter method'
-        
-        return mediabox, resources, contents
-
 
 
 class Page(Abstract):
@@ -1243,10 +1084,10 @@ class PDFContents(Abstract):
         self.current_point = self.origin
         
         # Set the rendering matrix to the unit matrix.
-        self.rendering_matrix = Numeric.identity(3)
+        self.rendering_matrix = identity(3)
         
         # Set the current transformation matrix to the unit matrix.
-        self.CTM = Numeric.identity(3)
+        self.CTM = identity(3)
         
         # Define a graphics state and a stack.
         self.graphics_state = \
@@ -1491,14 +1332,13 @@ class PDFContents(Abstract):
                     # concatenating a matrix defined by the given six
                     # numbers.
                     
-                    matrix = Numeric.identity(3)
-                    matrix[0][0:2] = items[-6:-4]
-                    matrix[1][0:2] = items[-4:-2]
-                    matrix[2][0:2] = items[-2:]
+                    render_matrix = matrix(
+                        [items[-6:-4]+[0], items[-4:-2]+[0], items[-2:]+[1]]
+                        )
                     
                     items = items[:-6]
                     
-                    self.CTM = self.CTM * matrix
+                    self.CTM = self.CTM * render_matrix
                 
                 elif com == 'i':
                 
@@ -2400,9 +2240,9 @@ class PDFContents(Abstract):
         
         # Define the text matrix - this transforms coordinates from text
         # space to user space.
-        self.text_matrix = Numeric.identity(3)              # T_m
-        self.line_matrix = Numeric.identity(3)              # T_LM
-        self.text_rendering_matrix = Numeric.identity(3)    # T_RM
+        self.text_matrix = identity(3)              # T_m
+        self.line_matrix = identity(3)              # T_LM
+        self.text_rendering_matrix = identity(3)    # T_RM
         self.text_line_start = self.origin
         
         # Record the contents of the text object.
@@ -2661,10 +2501,9 @@ class PDFContents(Abstract):
                 elif com == 'Tm':
                 
                     # Set text and line matrices.
-                    self.text_matrix = Numeric.identity(3)
-                    self.text_matrix[0][0:2] = items[-6:-4]
-                    self.text_matrix[1][0:2] = items[-4:-2]
-                    self.text_matrix[2][0:2] = items[-2:]
+                    self.text_matrix = matrix(
+                        [items[-6:-4]+[0], items[-4:-2]+[0], items[-2:]+[1]]
+                        )
                     
                     items = items[:-6]
                     
@@ -2707,19 +2546,13 @@ class PDFContents(Abstract):
 
     def move_text_to(self, tx, ty, text_matrix, line_matrix):
     
-        text_matrix = Numeric.matrixmultiply(
-            Numeric.array(
+        text_matrix = matrix(
                 [[1, 0, 0], [0, 1, 0], [tx, ty, 1]]
-                ),
-            line_matrix
-            )
+                ) * line_matrix
         
-        line_matrix = Numeric.matrixmultiply(
-            Numeric.array(
+        line_matrix = matrix(
                 [[1, 0, 0], [0, 1, 0], [tx, ty, 1]]
-                ),
-            line_matrix
-            )
+                ) * line_matrix
         
         return text_matrix, line_matrix
     
@@ -2742,16 +2575,10 @@ class PDFContents(Abstract):
     def calculate_rendering_matrix(self, T_fs, T_h, T_rise, T_m, CTM):
     
         # Construct a matrix to modify the text matrix.
-        matrix = Numeric.identity(3)
-        
-        matrix[0][0] = T_fs * T_h
-        matrix[1][1] = T_fs
-        matrix[2][1] = T_rise
+        render_matrix = matrix([[T_fs * T_h, 0, 0],[0, T_fs, 0], [0, T_rise, 0]])
         
         # Multiply the newly constructed matrix by the text matrix and the CTM.
-        return Numeric.matrixmultiply(
-            matrix, Numeric.matrixmultiply(T_m, CTM)
-            )
+        return render_matrix * (T_m * CTM)
     
     def read_text(self, objects = None, position = None, threshold = None):
     

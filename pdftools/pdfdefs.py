@@ -26,7 +26,7 @@ Definitions of PDF-related classes and values that are needed by the other
 pdftools modules.
 """
 
-import string, sys, types
+import copy, string, sys, types
 
 
 class boolean:
@@ -141,6 +141,61 @@ class Stream:
 
         self.start = start
         self.end = end
+
+
+class matrix:
+
+    def __init__(self, rows):
+    
+        self.rows = rows
+    
+    def __repr__(self):
+    
+        values = reduce(lambda x, y: x + y, self.rows)
+        sizes = map(lambda x: len("%i" % x), values)
+        
+        size = min(sizes)
+        format = ("/%%0%ii %%0%ii %%0%ii\\\n"
+                  "|%%0%ii %%0%ii %%0%ii|\n"
+                  "\\%%0%ii %%0%ii %%0%ii/") % tuple([size] * 9)
+        return format % tuple(values)
+    
+    def ___mul___(self, r1, r2):
+    
+        rows = [[r1[0][0]*r2[0][0] + r1[0][1]*r2[1][0] + r1[0][2]*r2[2][0],
+                 r1[0][0]*r2[0][1] + r1[0][1]*r2[1][1] + r1[0][2]*r2[2][1],
+                 r1[0][0]*r2[0][2] + r1[0][1]*r2[1][2] + r1[0][2]*r2[2][2]],
+                [r1[1][0]*r2[0][0] + r1[1][1]*r2[1][0] + r1[1][2]*r2[2][0],
+                 r1[1][0]*r2[0][1] + r1[1][1]*r2[1][1] + r1[1][2]*r2[2][1],
+                 r1[1][0]*r2[0][2] + r1[1][1]*r2[1][2] + r1[1][2]*r2[2][2]],
+                [r1[2][0]*r2[0][0] + r1[2][1]*r2[1][0] + r1[2][2]*r2[2][0],
+                 r1[2][0]*r2[0][1] + r1[2][1]*r2[1][1] + r1[2][2]*r2[2][1],
+                 r1[2][0]*r2[0][2] + r1[2][1]*r2[1][2] + r1[2][2]*r2[2][2]]]
+        
+        return rows
+    
+    def __mul__(self, other):
+    
+        r1 = self.rows
+        r2 = other.rows
+        
+        return matrix(self.___mul___(r1, r2))
+    
+    def __rmul__(self, other):
+    
+        r1 = other.rows
+        r2 = self.rows
+        
+        return matrix(self.___mul___(r1, r2))
+    
+    def copy(self):
+    
+        return matrix(copy.deepcopy(self.rows))
+
+
+def identity(size):
+
+    return matrix([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
 
 class vector:
