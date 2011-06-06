@@ -1,5 +1,5 @@
 # pdftools - A library of classes for parsing and rendering PDF documents.
-# Copyright (C) 2001-2004 by David Boddie
+# Copyright (C) 2001-2008 by David Boddie
 # 
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Library General Public
@@ -150,9 +150,9 @@ class matrix:
     def __repr__(self):
     
         values = reduce(lambda x, y: x + y, self.rows)
-        format = ("((%i, %i, %i),\n"
-                  " (%i, %i, %i),\n"
-                  " (%i, %i, %i))")
+        format = ("((%03f, %03f, %03f),\n"
+                  " (%03f, %03f, %03f),\n"
+                  " (%03f, %03f, %03f))")
         return format % tuple(values)
     
     def ___mul___(self, r1, r2):

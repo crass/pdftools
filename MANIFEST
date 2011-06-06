@@ -1,5 +1,6 @@
 LICENSE
 MANIFEST
+README.txt
 setup.py
 pdftools/__init__.py
 pdftools/pdfdefs.py

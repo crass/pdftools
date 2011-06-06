@@ -1,5 +1,5 @@
 # pdftools - A library of classes for parsing and rendering PDF documents.
-# Copyright (C) 2001-2004 by David Boddie
+# Copyright (C) 2001-2008 by David Boddie
 # 
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Library General Public
@@ -75,10 +75,12 @@ class Font:
         fm = QFontMetricsF(font)
         return fm.width(text)
     
-    if with_metrics:
-        width = _width_with_metrics
-    else:
-        width = _width_without_metrics
+    def width(self, text, use_metrics = False):
+    
+        if use_metrics and with_metrics:
+            return self._width_with_metrics(text)
+        else:
+            return self._width_without_metrics(text)
 
 
 class Text:
