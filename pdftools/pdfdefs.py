@@ -152,12 +152,9 @@ class matrix:
     def __repr__(self):
     
         values = reduce(lambda x, y: x + y, self.rows)
-        sizes = map(lambda x: len("%i" % x), values)
-        
-        size = min(sizes)
-        format = ("/%%0%ii %%0%ii %%0%ii\\\n"
-                  "|%%0%ii %%0%ii %%0%ii|\n"
-                  "\\%%0%ii %%0%ii %%0%ii/") % tuple([size] * 9)
+        format = ("((%i, %i, %i),\n"
+                  " (%i, %i, %i),\n"
+                  " (%i, %i, %i))")
         return format % tuple(values)
     
     def ___mul___(self, r1, r2):
@@ -275,7 +272,7 @@ whitespace = '\000\011\012\014\015 '
 
 # hexa = '0123456789abcdef'
 integer = '0123456789+-'
-real = '0123456789+-.'               
+real = '0123456789+-.'
 
 base85m4 = long(pow(85,4))
 base85m3 = long(pow(85,3))
@@ -293,12 +290,18 @@ class FileWrapper:
         if type(item) == types.SliceType:
         
             self.file.seek(item.start)
-            return self.file.read(max(0, item.stop - item.start))
-        
+            length = max(0, item.stop - item.start)
+            data = self.file.read(length)
+            if len(data) != length:
+                raise IndexError, "string index out of range"
         else:
         
             self.file.seek(item)
-            return self.file.read(1)
+            data = self.file.read(1)
+            if not data:
+                raise IndexError, "string index out of range"
+        
+        return data
     
     if sys.version_info < 2.0:
     
@@ -639,12 +642,13 @@ class Abstract:
     
     def _read_next(self, offset, this_array):
     
+        #print "_read_next", hex(offset)
         c = self.file[offset]
         
         # Comment
         if c == '%':
     
-            # print 'comment'
+            #print 'comment', hex(offset)
             at, element = self._read_comment(offset+1)
     
         # Boolean
@@ -652,7 +656,7 @@ class Abstract:
     
             if self.file[offset:offset+4] == 'true':
     
-                # print 'true'
+                #print 'true', hex(offset)
                 element = true
                 at = offset + 4
     
@@ -663,7 +667,7 @@ class Abstract:
     
             if self.file[offset:offset+5] == 'false':
     
-                # print 'false'
+                #print 'false', hex(offset)
                 element = false
                 at = offset + 5
     
@@ -692,10 +696,10 @@ class Abstract:
             at = offset
     
             if is_real == 0:
-                # print 'integer'
+                #print 'integer', hex(offset), int(value)
                 element = int(value)
             else:
-                # print 'real'
+                #print 'real', hex(offset), float(value)
                 element = float(value)
     
         elif c in real:
@@ -718,13 +722,13 @@ class Abstract:
         # Name
         elif c == '/':
     
-            # print 'name'
+            #print 'name', hex(offset)
             at, element = self._read_name(offset+1)
     
         # String
         elif c == '(':
     
-            # print 'string'
+            #print 'string', hex(offset)
             at, element = self._read_string(offset+1)
     
         # Hexadecimal string or dictionary
@@ -732,23 +736,25 @@ class Abstract:
     
             if self.file[offset+1] != '<':
     
-                    # print 'hexadecimal string'
+                #print 'hexadecimal string', hex(offset)
                 at, element = self._read_hexadecimal(offset+1)
     
             else:
+                #print 'dictionary', hex(offset)
                 at, element = self._read_dictionary(offset+2)
     
         # Array
         elif c == '[':
     
+            #print "array", hex(offset)
             at, element = self._read_array(offset+1)
     
         # null
         elif c == 'n':
-    
+        
             if self.file[offset:offset+4] == 'null':
     
-                # print 'null'
+                #print 'null', hex(offset)
                 at = offset + 4
                 element = null
     
@@ -758,7 +764,7 @@ class Abstract:
         # Object reference
         elif c == 'R':
     
-            # print 'reference'
+            #print 'reference', hex(offset)
             # Take the last two items in the array and check that they
             # are integers
             obj, gen = this_array[-2], this_array[-1]
@@ -768,16 +774,22 @@ class Abstract:
             element = reference(obj, gen)
             at = offset + 1
     
-        # Stream
+        # Stream or other token beginning with s
         elif c == 's':
-    
-            at, element = self._read_stream(offset+6)
-    
+        
+            if self.file[offset:offset+6] == 'stream':
+                #print 'stream', hex(offset)
+                at, element = self._read_stream(offset+6)
+            
+            elif self.file[offset:offset+9] == 'startxref':
+                return offset, None
+        
         # Object
         elif c == 'o':
     
             if self.file[offset:offset+3] == 'obj':
-    
+            
+                #print 'object', hex(offset)
                 # Take the last two items in the array and check that they
                 # are integers
                 obj, gen = this_array[-2], this_array[-1]
@@ -800,7 +812,7 @@ class Abstract:
     
     def _read_array(self, offset):
     
-        # print '_read_array'
+        #print '_read_array', hex(offset)
         # Arrays begin with [ and end with ]
         # They can be nested like strings, but contain objects rather
         # than just a series of bytes
@@ -825,11 +837,14 @@ class Abstract:
             else:
     
                 at, element = self._read_next(at, this_array)
-    
-            # Add the element to the array
-            this_array.append(element)
-    
-        # print '_read_array return'
+                
+                # Add the element to the array
+                if element is not None:
+                    this_array.append(element)
+                else:
+                    break
+        
+        #print '_read_array return', hex(at)
         return at + 1, this_array
     
     def _read_dictionary(self, offset):
@@ -854,10 +869,14 @@ class Abstract:
                 break
     
             else:
-    
+            
+                #print "dictionary next", hex(at)
                 at, element = self._read_next(at, this_array)
-    
-            this_array.append(element)
+                
+                if element is not None:
+                    this_array.append(element)
+                else:
+                    break
     
         # Collate the list into key value pairs
         dict = {}
@@ -869,7 +888,7 @@ class Abstract:
             if keyvalue == 0:
                 if isinstance(element, name) == 0:
                     raise PDFError, \
-                          'Key found which was not a name "'+element + \
+                          'Key found which was not a name "'+repr(element) + \
                           '" in dictionary at %s' % hex(offset - 1)
                 else:
                     key = element
@@ -882,14 +901,14 @@ class Abstract:
         if keyvalue == 1:
             print 'Incomplete dictionary at %s ?' % hex(offset - 1)
     
-        # print '_read_dictionary return'
+        #print '_read_dictionary return', hex(at)
     
         return at + 2, dict
     
     def _read_object(self, offset):
     
         # Objects start with obj and end with endobj
-    #    print '_read_object'
+        #print '_read_object', hex(offset)
     
         at = offset
 
@@ -904,12 +923,16 @@ class Abstract:
                 break
     
             else:
-    
+            
+                #print "object next", hex(at)
                 at, element = self._read_next(at, this_array)
+                
+                if element is not None:
+                    this_array.append(element)
+                else:
+                    break
     
-            this_array.append(element)
-    
-    #    print '_read_object return'
+        #print '_read_object return'
     
         return at+6, object(this_array)
     
@@ -925,7 +948,7 @@ class Abstract:
     
     def _read_stream(self, offset):
     
-        # print 'stream'
+        #print '_read_stream', hex(offset)
         
         # Expect either a carriage return then a linefeed or just a linefeed.
         
@@ -938,11 +961,11 @@ class Abstract:
             offset = offset + 1
         
         else:
-            
+        
             raise PDFError, "Unexpected start to the stream at %x" % offset
         
         # Temporary solution
         at = string.find(self.file, 'endstream', offset)
     
-        # print 'endstream'
+        #print 'endstream', hex(at)
         return at+9, Stream(offset, at)

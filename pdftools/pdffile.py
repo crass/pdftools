@@ -221,7 +221,7 @@ class PDFDocument(Abstract):
     
         at = self._skip_whitespace(offset)
         at, trailer_dict = self._read_dictionary(at+2)
-    
+        
         at = string.find(self.file, 'startxref', at)
         at = self._skip_whitespace(at+9)
     
@@ -352,6 +352,12 @@ class PDFDocument(Abstract):
         # Starting at the beginning of the file, skip the initial
         # version declaration and binary data.
         version = self.document_version()
+        
+        try:
+            if float(version) > 1.4:
+                raise ValueError
+        except ValueError:
+            raise PDFError, "Unsupported PDF version: %s" % version
         
         i = 1 + len("PDF-") + len(version)
         
@@ -758,7 +764,7 @@ class Page(Abstract):
             # various entries describing the stream and the stream itself.
             
             # The length of the stream is given in the dictionary.
-            length = self.document._dereference(item[0]['Length'])
+            length = self.document._dereference(item[0].get('Length', 0))
             
             # A list of the filters to be used to process the stream is also
             # given.
@@ -796,7 +802,7 @@ class Page(Abstract):
                 
                     contents = self._asciihexdecode(contents)
                 
-                elif filter.name == '_ascii85decode':
+                elif filter.name == '_ascii85decode' or filter.name == 'ASCII85Decode':
                 
                     contents = self._ascii85decode(contents)
                 
@@ -2136,8 +2142,8 @@ class PDFContents(Abstract):
                     # control point.
                     
                     c1 = point(*items[-4:-2])
-                    c2 = self.current_point
-                    new_point = point(*items[-2:])
+                    c2 = point(*items[-2:])
+                    new_point = c2
                     
                     contents.append(
                         pdfpath.Bezier(self.current_point, c1, c2, new_point)
@@ -2280,10 +2286,13 @@ class PDFContents(Abstract):
                     items.pop()
                     items.pop()
                     
-                    self.text_matrix, self.line_matrix = \
-                        self.move_text_to(
-                            tx, ty, self.text_matrix, self.line_matrix
+                    self.text_matrix = self.move_text_to(
+                        tx, ty, self.text_matrix, self.line_matrix
                         )
+                    
+                    self.line_matrix = self.text_matrix.copy()
+                    self.text_line_start = self.text_line_start + point(tx, ty)
+                    self.current_point = self.text_line_start
                 
                 elif com == 'TD':
                 
@@ -2296,8 +2305,12 @@ class PDFContents(Abstract):
                     items.pop()
                     items.pop()
                     
-                    self.text_matrix, self.line_matrix = \
-                        self.move_text_to(tx, ty, self.text_matrix, self.line_matrix)
+                    self.text_matrix = self.move_text_to(
+                        tx, ty, self.text_matrix, self.line_matrix
+                        )
+                    self.line_matrix = self.text_matrix.copy()
+                    self.text_line_start = self.text_line_start + point(tx, ty)
+                    self.current_point = self.current_point + point(tx, ty)
     
                 elif com == 'Tj':
                 
@@ -2336,8 +2349,9 @@ class PDFContents(Abstract):
                     tx = 0
                     ty = self.text_leading
                     
-                    self.text_matrix, self.line_matrix = \
-                        self.move_text_to(tx, ty, self.text_matrix, self.line_matrix)
+                    self.text_matrix = self.move_text_to(
+                        tx, ty, self.text_matrix, self.line_matrix
+                        )
                     
                     text = items[-1]
                     
@@ -2377,8 +2391,9 @@ class PDFContents(Abstract):
                     tx = 0
                     ty = self.text_leading
                     
-                    self.text_matrix, self.line_matrix = \
-                        self.move_text_to(tx, ty, self.text_matrix, self.line_matrix)
+                    self.text_matrix = self.move_text_to(
+                        tx, ty, self.text_matrix, self.line_matrix
+                        )
                     
                     # Calculate the text rendering matrix.
                     self.text_rendering_matrix = \
@@ -2519,8 +2534,12 @@ class PDFContents(Abstract):
                     tx = 0
                     ty = self.text_leading
                     
-                    self.text_matrix, self.line_matrix = \
-                        self.move_text_to(tx, ty, self.text_matrix, self.line_matrix)
+                    self.text_matrix = self.move_text_to(
+                        tx, ty, self.text_matrix, self.line_matrix
+                        )
+                    self.line_matrix = self.text_matrix.copy()
+                    self.text_line_start = self.text_line_start + point(tx, ty)
+                    self.current_point = self.current_point + point(tx, ty)
                 
                 elif com == ending:
                 
@@ -2550,11 +2569,7 @@ class PDFContents(Abstract):
                 [[1, 0, 0], [0, 1, 0], [tx, ty, 1]]
                 ) * line_matrix
         
-        line_matrix = matrix(
-                [[1, 0, 0], [0, 1, 0], [tx, ty, 1]]
-                ) * line_matrix
-        
-        return text_matrix, line_matrix
+        return text_matrix
     
     def select_font(self, name, size):
 

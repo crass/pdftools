@@ -29,6 +29,13 @@ Text state command support.
 # Import required items from the pdftools module.
 from pdfdefs import point
 
+try:
+    from PyQt4.QtGui import QFontDatabase, QFontMetricsF
+    with_metrics = True
+
+except ImportError:
+    with_metrics = False
+
 
 class Font:
 
@@ -37,13 +44,44 @@ class Font:
         self.font = font
         self.size = size
     
-    def width(self, text):
+    def _width_without_metrics(self, text):
     
         # Return the width of this piece of text when rendered using this
         # font.
         
         # * To be replaced: return a value for a monospaced font. *
         return len(text) * self.size
+    
+    def _width_with_metrics(self, text):
+    
+        # Return the width of this piece of text when rendered using this
+        # font.
+        
+        fontName = self.font["BaseFont"].name
+        at = fontName.find("+")
+        if at != -1:
+            fontName = fontName[at+1:]
+
+        if "-" in fontName:
+            family, style = fontName.split("-")[:2]
+        elif " " in fontName:
+            family, style = fontName.split(" ")[:2]
+        elif "," in fontName:
+            family, style = fontName.split(",")[:2]
+        else:
+            family = fontName
+            style = ""
+        
+        font = QFontDatabase().font(family, style, self.size)
+        font.setPointSizeF(self.size)
+        fm = QFontMetricsF(font)
+        return fm.width(text)
+    
+    if with_metrics:
+        width = _width_with_metrics
+    else:
+        width = _width_without_metrics
+
 
 class Text:
 
