@@ -714,7 +714,9 @@ class Page(Abstract):
         
         # Fetch the MediaBox.
         self.required["MediaBox"] = \
-            self.document._inherit(self.page_dict, 'MediaBox')
+            self.document._dereference(
+                self.document._inherit(self.page_dict, 'MediaBox')
+                )
         
         # Fetch the Parent and convert it into a Pages object.
         self.required["Parent"] = \

@@ -22,5 +22,5 @@ Initialisation for the pdftools package.
 """
 
 __all__ = ["pdfdefs", "pdffile", "pdfpath", "pdftext"]
-__version__ = "0.36"
-version = '%s (Tuesday 18th March 2008)' % __version__
+__version__ = "0.37"
+version = '%s (Tuesday 22nd April 2008)' % __version__
