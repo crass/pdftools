@@ -1,0 +1,8 @@
+LICENSE
+MANIFEST
+setup.py
+pdftools/__init__.py
+pdftools/pdfdefs.py
+pdftools/pdffile.py
+pdftools/pdfpath.py
+pdftools/pdftext.py
